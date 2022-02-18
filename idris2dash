@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+
+# This script creates Idris2.docset for use in Dash.app
+# It expects idris to be in ~/.idris2 and is hardcoded to 0.5.1 at the moment.
+
+import os, sqlite3, html5lib, re
+
+oj = os.path.join
+
+debug = lambda *x: None
+# debug = print
+
+infoPlist = '''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>idris2</string>
+	<key>CFBundleName</key>
+	<string>Idris2</string>
+	<key>DocSetPlatformFamily</key>
+	<string>Idris2</string>
+	<key>isDashDocset</key>
+	<true/>
+</dict>
+</plist>
+'''
+
+base = 'Idris2.docset'
+resources = oj(base, 'Contents/Resources')
+os.makedirs(resources, exist_ok=True)
+db = sqlite3.Connection(oj(resources, 'docSet.dsidx'))
+db.execute('CREATE TABLE IF NOT EXISTS searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);')
+db.execute('CREATE UNIQUE INDEX IF NOT EXISTS anchor ON searchIndex (name, type, path);')
+db.execute('DELETE FROM searchIndex')
+db.commit()
+
+open(oj(base,'Contents/Info.plist'),'w').write(infoPlist)
+
+def register(name, kind, path):
+    debug('register',kind, name, path)
+    db.execute("INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)",[name,kind,path])
+    
+def elem(doc, name):
+    return doc.findall(f'.//{name}')
+
+def process(p,f):
+    def scan(node, parent=''):
+        kind = parent
+        for el in node:
+            if el.get('id') == 'moduleHeader':
+                name = el.cssselect('h1')[0].text
+                register(name, 'Module', oj(p,f'{f}#moduleHeader'))
+                debug(f,name)
+            elif el.tag == 'dt':
+                id = el.get('id')
+                parts = id.split('.')
+                name = parts[-1]
+                m = re.match(r'.*\((.*)\)', id)
+                if m: name = m[1]
+                link = oj(p,f'{f}#{id}')
+                # "hints" section
+                if name.startswith('$resolved'): continue
+                if name and name[0]:
+                    # see https://kapeli.com/docsets#supportedentrytypes for possible values
+                    kind = 'Function'
+                    c = name[0]
+                    if c == '.':
+                        kind = 'Field'
+                    elif c.isupper(): 
+                        text = ''.join(el.itertext())
+                        if text.startswith('interface'):
+                            kind = 'Interface'
+                        elif text.startswith('record'):
+                            kind = 'Record'
+                        elif parent == 'Type':
+                            kind = 'Constructor'
+                        else:
+                            kind = 'Type'
+                    elif c.islower():
+                        if parent: kind = 'Method'
+                    else:
+                        kind = 'Operator'
+                    register(name, kind, link)
+                        
+            else:
+                scan(el, kind)
+
+    data = open(oj(src,p,f),'rb').read()
+    os.makedirs(oj(dest,p), exist_ok=True)
+    open(oj(dest,p,f),'wb').write(data)
+    if f.endswith('.html'):        
+        doc = html5lib.parse(data,treebuilder='lxml',namespaceHTMLElements=False)
+        scan(doc.getroot())
+        # assert 'Data' not in f
+        
+        
+src = os.path.expanduser('~/.idris2/idris2-0.5.1/docs')
+dest = oj(resources, 'Documents')
+for p,ds,fs in os.walk(src):
+    p = os.path.relpath(p,src)
+    for f in fs:
+        process(p,f)
+db.commit()
+print('Wrote', base)
