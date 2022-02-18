@@ -73,7 +73,7 @@ jobs:
           python-version: '3.x'
           cache: 'pip'
       - name: Install html5lib
-        run: pip3 install html5lib
+        run: pip3 install html5lib lxml cssselect
       - name: build
         run: |
           python3 idris2dash
