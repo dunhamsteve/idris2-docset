@@ -72,7 +72,7 @@ jobs:
         with:
           python-version: '3.x'
           cache: 'pip'
-      - nme: Install html5lib
+      - name: Install html5lib
         run: pip3 install html5lib
       - name: build
         run: |
