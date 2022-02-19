@@ -3,7 +3,7 @@
 # This script creates Idris2.docset for use in Dash.app
 # It expects idris to be in ~/.idris2 and is hardcoded to 0.5.1 at the moment.
 
-import os, sqlite3, html5lib, re
+import os, sqlite3, html5lib, re, shutil
 
 oj = os.path.join
 
@@ -20,6 +20,8 @@ infoPlist = '''<?xml version="1.0" encoding="UTF-8"?>
 	<string>Idris2</string>
 	<key>DocSetPlatformFamily</key>
 	<string>Idris2</string>
+    <key>dashIndexFilePath</key>
+    <string>index.html</string>
 	<key>isDashDocset</key>
 	<true/>
 </dict>
@@ -101,5 +103,6 @@ for p,ds,fs in os.walk(src):
     p = os.path.relpath(p,src)
     for f in fs:
         process(p,f)
+    shutil.copy('idris-32x32.png', oj(base,'icon.png'))
 db.commit()
 print('Wrote', base)
